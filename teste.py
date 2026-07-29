@@ -36,4 +36,4 @@ if __name__ == "__main__":
     expr = input("Digite uma expressão: ")
     print(unsafe_eval(expr))
     
-print("Ola mundo hahahahaha que loucura hahahahahah")
+print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5")
