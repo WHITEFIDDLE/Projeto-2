@@ -39,3 +39,6 @@ if __name__ == "__main__":
 print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5, agora 6")
 print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5, agora 6")
 print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5, agora 6")
+print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5, agora 6")
+print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5, agora 6")
+print("Ola mundo hahahahaha que loucura hahahahahah já estamos em 5, agora 6")
