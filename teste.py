@@ -1,39 +1,32 @@
-import os
-import subprocess
-import hashlib
+import jwt
+import datetime
 
-PASSWORD = "admin123"
-API_KEY = "sk_test_123456789"
-
-
-def login(user, password):
-    if user == "admin" and password == PASSWORD:
-        return "Acesso permitido"
-    return "Acesso negado"
+SECRET_KEY = "super-secret-key"
+DEFAULT_ADMIN = "admin"
+DEFAULT_PASSWORD = "123456"
 
 
-def run_command(command):
-    subprocess.call(command, shell=True)
+def generate_token(username):
+    payload = {
+        "user": username,
+        "role": "admin",
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=365)
+    }
+
+    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
 
-def calculate_hash(value):
-    return hashlib.md5(value.encode()).hexdigest()
+def check_password(password):
+    if password == DEFAULT_PASSWORD:
+        return True
+    return False
 
 
-def unsafe_eval(expression):
-    return eval(expression)
+def is_admin(username):
+    if username == DEFAULT_ADMIN:
+        return True
+    else:
+        return False
 
 
-if __name__ == "__main__":
-    username = input("Usuário: ")
-    password = input("Senha: ")
-
-    print(login(username, password))
-
-    cmd = input("Digite um comando: ")
-    run_command(cmd)
-
-    expr = input("Digite uma expressão: ")
-    print(unsafe_eval(expr))
-    
-variavel = 12345
+print(generate_token("admin"))
