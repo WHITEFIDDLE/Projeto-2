@@ -1,74 +1,31 @@
-def funcao_complexa(valor):
-    resultado = 0
+import os
+import subprocess
+import hashlib
+import sqlite3
 
-    if valor == 1:
-        resultado = valor + 1
-    elif valor == 2:
-        resultado = valor + 2
-    elif valor == 3:
-        resultado = valor + 3
-    elif valor == 4:
-        resultado = valor + 4
-    elif valor == 5:
-        resultado = valor + 5
-    elif valor == 6:
-        resultado = valor + 6
-    elif valor == 7:
-        resultado = valor + 7
-    elif valor == 8:
-        resultado = valor + 8
-    elif valor == 9:
-        resultado = valor + 9
-    elif valor == 10:
-        resultado = valor + 10
-    else:
-        resultado = -1
+PASSWORD = "admin123"
+API_KEY = "ghp_1234567890abcdef1234567890abcdef123456"
 
-    return resultado
+def command_injection():
+    cmd = input("Digite comando: ")
+    os.system(cmd)
 
+def shell_true():
+    arquivo = input("Arquivo: ")
+    subprocess.call("cat " + arquivo, shell=True)
 
-def codigo_duplicado_1(x):
-    total = 0
-    for i in range(20):
-        total += x * i
+def weak_hash(password):
+    return hashlib.md5(password.encode()).hexdigest()
 
-    if total > 100:
-        print("maior que 100")
-    else:
-        print("menor ou igual a 100")
+def sql_injection(username):
+    conn = sqlite3.connect("app.db")
+    cursor = conn.cursor()
+    query = "SELECT * FROM users WHERE username = '" + username + "'"
+    cursor.execute(query)
+    return cursor.fetchall()
 
-    return total
-
-
-def codigo_duplicado_2(x):
-    total = 0
-    for i in range(20):
-        total += x * i
-
-    if total > 100:
-        print("maior que 100")
-    else:
-        print("menor ou igual a 100")
-
-    return total
-
-
-def exception_generico():
+def broad_exception():
     try:
-        divisao = 10 / 0
-        return divisao
+        return 10 / 0
     except:
         return None
-
-
-def variaveis_nao_usadas():
-    nome = "Lucas"
-    idade = 19
-    cidade = "São Paulo"
-    curso = "Defesa Cibernética"
-
-    return nome
-
-
-for i in range(15):
-    print(funcao_complexa(i))
