@@ -1,112 +1,52 @@
 import os
-import sqlite3
 import subprocess
+import sqlite3
 import hashlib
 import pickle
-import base64
-from flask import Flask, request, jsonify
+import yaml
+import tempfile
+import random
 
-app = Flask(__name__)
 
-# Falha: secret hardcoded
-app.config["SECRET_KEY"] = "minha-chave-secreta-123"
-
-# Falha: credenciais hardcoded
-DB_USER = "admin"
-DB_PASSWORD = "admin123"
-API_TOKEN = "token_super_secreto_123456"
+# Falha: secrets hardcoded
+DATABASE_URL = "postgresql://admin:admin123@localhost:5432/prod"
+API_KEY = "sk_live_123456789abcdef"
+JWT_SECRET = "super-secret-jwt-key"
 AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"
 AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 
-DATABASE = "app.db"
 
-
-def init_db():
-    conn = sqlite3.connect(DATABASE)
+def login(username, password):
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT,
-            password TEXT
-        )
-    """)
-
-    cursor.execute("""
-        INSERT INTO users (username, password)
-        SELECT 'admin', 'admin123'
-        WHERE NOT EXISTS (
-            SELECT 1 FROM users WHERE username = 'admin'
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-@app.route("/")
-def home():
-    return """
-    <h1>Vulnerable Python App</h1>
-    <p>Aplicação simples com falhas intencionais.</p>
-
-    <ul>
-        <li>/login?username=admin&password=admin123</li>
-        <li>/search?q=&lt;script&gt;alert(1)&lt;/script&gt;</li>
-        <li>/ping?host=127.0.0.1</li>
-        <li>/hash?password=teste123</li>
-        <li>/read-file?name=vulnerable_app.py</li>
-        <li>/debug</li>
-    </ul>
-    """
-
-
-@app.route("/login")
-def login():
-    username = request.args.get("username", "")
-    password = request.args.get("password", "")
-
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    # Falha: SQL Injection
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+    # Falha: SQL Injection por concatenação de string
+    query = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'"
 
     cursor.execute(query)
-    user = cursor.fetchone()
+    result = cursor.fetchone()
+
     conn.close()
-
-    if user:
-        return jsonify({
-            "status": "success",
-            "message": "Login realizado",
-            "user": user
-        })
-
-    return jsonify({
-        "status": "error",
-        "message": "Usuário ou senha inválidos"
-    })
+    return result
 
 
-@app.route("/search")
-def search():
-    q = request.args.get("q", "")
+def search_user(user_id):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
 
-    # Falha: XSS refletido
-    return f"""
-    <h1>Busca</h1>
-    <p>Você pesquisou por: {q}</p>
-    """
+    # Falha: SQL Injection via f-string
+    query = f"SELECT * FROM users WHERE id = {user_id}"
+
+    cursor.execute(query)
+    result = cursor.fetchall()
+
+    conn.close()
+    return result
 
 
-@app.route("/ping")
-def ping():
-    host = request.args.get("host", "127.0.0.1")
-
+def ping_host(host):
     # Falha: command injection
-    command = f"ping -n 1 {host}"
+    command = "ping -n 1 " + host
 
     output = subprocess.check_output(
         command,
@@ -114,63 +54,117 @@ def ping():
         text=True
     )
 
-    return f"<pre>{output}</pre>"
+    return output
 
 
-@app.route("/hash")
-def hash_password():
-    password = request.args.get("password", "")
-
-    # Falha: MD5 é fraco para senha
-    password_hash = hashlib.md5(password.encode()).hexdigest()
-
-    return jsonify({
-        "password": password,
-        "hash": password_hash
-    })
+def list_directory(path):
+    # Falha: command injection com os.system
+    os.system("dir " + path)
 
 
-@app.route("/read-file")
-def read_file():
-    file_name = request.args.get("name", "vulnerable_app.py")
+def hash_password_md5(password):
+    # Falha: MD5 não deve ser usado para senha
+    return hashlib.md5(password.encode()).hexdigest()
 
-    # Falha: path traversal / leitura de arquivo sem validação
+
+def hash_password_sha1(password):
+    # Falha: SHA1 também é fraco para senha
+    return hashlib.sha1(password.encode()).hexdigest()
+
+
+def insecure_random_token():
+    # Falha: random não é adequado para token de segurança
+    token = ""
+
+    for _ in range(16):
+        token += str(random.randint(0, 9))
+
+    return token
+
+
+def load_pickle_data(file_path):
+    # Falha: pickle.load pode executar código malicioso se o arquivo for não confiável
+    with open(file_path, "rb") as file:
+        data = pickle.load(file)
+
+    return data
+
+
+def load_yaml_config(file_path):
+    # Falha: yaml.load sem SafeLoader
+    with open(file_path, "r", encoding="utf-8") as file:
+        config = yaml.load(file, Loader=yaml.Loader)
+
+    return config
+
+
+def read_file(file_name):
+    # Falha: path traversal se file_name vier de usuário
     with open(file_name, "r", encoding="utf-8", errors="ignore") as file:
-        content = file.read()
-
-    return f"<pre>{content}</pre>"
+        return file.read()
 
 
-@app.route("/deserialize", methods=["POST"])
-def deserialize():
-    payload = request.json.get("payload", "")
+def write_temp_file(content):
+    # Falha: tempfile inseguro com delete=False e conteúdo sensível
+    temp = tempfile.NamedTemporaryFile(delete=False, mode="w", encoding="utf-8")
+    temp.write(content)
+    temp.close()
 
-    # Falha: desserialização insegura
-    decoded = base64.b64decode(payload)
-    obj = pickle.loads(decoded)
-
-    return jsonify({
-        "message": "Objeto desserializado",
-        "object": str(obj)
-    })
+    return temp.name
 
 
-@app.route("/debug")
-def debug():
-    # Falha: exposição de informações sensíveis
-    return jsonify({
-        "environment": dict(os.environ),
-        "db_user": DB_USER,
-        "db_password": DB_PASSWORD,
-        "api_token": API_TOKEN,
-        "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
-        "flask_secret": app.config["SECRET_KEY"]
-    })
+def expose_environment():
+    # Falha: exposição de variáveis de ambiente
+    return dict(os.environ)
+
+
+def dangerous_eval(expression):
+    # Falha: eval executa código arbitrário
+    return eval(expression)
+
+
+def dangerous_exec(code):
+    # Falha: exec executa código arbitrário
+    exec(code)
+
+
+def disabled_ssl_verification():
+    import requests
+
+    # Falha: verify=False desabilita validação TLS
+    response = requests.get(
+        "https://example.com",
+        verify=False,
+        timeout=10
+    )
+
+    return response.text
+
+
+def broad_exception():
+    try:
+        result = 10 / 0
+        return result
+    except Exception:
+        # Falha: captura genérica e silenciosa
+        pass
+
+
+def hardcoded_admin_check(username, password):
+    # Falha: senha hardcoded
+    if username == "admin" and password == "admin123":
+        return True
+
+    return False
+
+
+def main():
+    print("Security Bad Practices Demo")
+    print("Token inseguro:", insecure_random_token())
+    print("MD5:", hash_password_md5("admin123"))
+    print("SHA1:", hash_password_sha1("admin123"))
+    print("Admin:", hardcoded_admin_check("admin", "admin123"))
 
 
 if __name__ == "__main__":
-    init_db()
-
-    # Falha: debug ativo em aplicação web
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    main()
