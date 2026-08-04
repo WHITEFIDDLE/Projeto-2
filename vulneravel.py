@@ -1,23 +1,24 @@
-from flask import Flask, request, render_template_string, jsonify
+import os
 import sqlite3
 import subprocess
-import os
 import hashlib
 import pickle
 import base64
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
 # Falha: secret hardcoded
-app.config["SECRET_KEY"] = "admin-secret-key-123"
+app.config["SECRET_KEY"] = "minha-chave-secreta-123"
 
 # Falha: credenciais hardcoded
 DB_USER = "admin"
-DB_PASSWORD = "password123"
+DB_PASSWORD = "admin123"
+API_TOKEN = "token_super_secreto_123456"
 AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"
 AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 
-DATABASE = "demo.db"
+DATABASE = "app.db"
 
 
 def init_db():
@@ -28,14 +29,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT,
-            password TEXT,
-            email TEXT
+            password TEXT
         )
     """)
 
     cursor.execute("""
-        INSERT INTO users (username, password, email)
-        SELECT 'admin', 'admin123', 'admin@example.com'
+        INSERT INTO users (username, password)
+        SELECT 'admin', 'admin123'
         WHERE NOT EXISTS (
             SELECT 1 FROM users WHERE username = 'admin'
         )
@@ -46,17 +46,18 @@ def init_db():
 
 
 @app.route("/")
-def index():
+def home():
     return """
-    <h1>Vulnerable Demo App</h1>
-    <p>Aplicação intencionalmente vulnerável para testar scanners.</p>
+    <h1>Vulnerable Python App</h1>
+    <p>Aplicação simples com falhas intencionais.</p>
 
     <ul>
-        <li><a href="/login?username=admin&password=admin123">SQL Injection test</a></li>
-        <li><a href="/search?q=<script>alert(1)</script>">XSS test</a></li>
-        <li><a href="/ping?host=127.0.0.1">Command Injection test</a></li>
-        <li><a href="/hash?password=teste123">Weak Hash test</a></li>
-        <li><a href="/debug">Debug Info Exposure</a></li>
+        <li>/login?username=admin&password=admin123</li>
+        <li>/search?q=&lt;script&gt;alert(1)&lt;/script&gt;</li>
+        <li>/ping?host=127.0.0.1</li>
+        <li>/hash?password=teste123</li>
+        <li>/read-file?name=vulnerable_app.py</li>
+        <li>/debug</li>
     </ul>
     """
 
@@ -79,27 +80,25 @@ def login():
     if user:
         return jsonify({
             "status": "success",
-            "message": "Login realizado com sucesso",
+            "message": "Login realizado",
             "user": user
         })
 
     return jsonify({
         "status": "error",
-        "message": "Credenciais inválidas"
+        "message": "Usuário ou senha inválidos"
     })
 
 
 @app.route("/search")
 def search():
-    query = request.args.get("q", "")
+    q = request.args.get("q", "")
 
     # Falha: XSS refletido
-    template = f"""
-    <h1>Resultado da busca</h1>
-    <p>Você pesquisou por: {query}</p>
+    return f"""
+    <h1>Busca</h1>
+    <p>Você pesquisou por: {q}</p>
     """
-
-    return render_template_string(template)
 
 
 @app.route("/ping")
@@ -109,35 +108,45 @@ def ping():
     # Falha: command injection
     command = f"ping -n 1 {host}"
 
-    result = subprocess.check_output(
+    output = subprocess.check_output(
         command,
         shell=True,
-        text=True,
-        stderr=subprocess.STDOUT
+        text=True
     )
 
-    return f"<pre>{result}</pre>"
+    return f"<pre>{output}</pre>"
 
 
 @app.route("/hash")
-def weak_hash():
+def hash_password():
     password = request.args.get("password", "")
 
-    # Falha: uso de MD5 para senha
-    hashed = hashlib.md5(password.encode()).hexdigest()
+    # Falha: MD5 é fraco para senha
+    password_hash = hashlib.md5(password.encode()).hexdigest()
 
     return jsonify({
         "password": password,
-        "md5": hashed
+        "hash": password_hash
     })
 
 
+@app.route("/read-file")
+def read_file():
+    file_name = request.args.get("name", "vulnerable_app.py")
+
+    # Falha: path traversal / leitura de arquivo sem validação
+    with open(file_name, "r", encoding="utf-8", errors="ignore") as file:
+        content = file.read()
+
+    return f"<pre>{content}</pre>"
+
+
 @app.route("/deserialize", methods=["POST"])
-def insecure_deserialize():
-    data = request.json.get("payload", "")
+def deserialize():
+    payload = request.json.get("payload", "")
 
     # Falha: desserialização insegura
-    decoded = base64.b64decode(data)
+    decoded = base64.b64decode(payload)
     obj = pickle.loads(decoded)
 
     return jsonify({
@@ -153,42 +162,15 @@ def debug():
         "environment": dict(os.environ),
         "db_user": DB_USER,
         "db_password": DB_PASSWORD,
-        "secret_key": app.config["SECRET_KEY"],
+        "api_token": API_TOKEN,
         "aws_access_key_id": AWS_ACCESS_KEY_ID,
-        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY
+        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY,
+        "flask_secret": app.config["SECRET_KEY"]
     })
-
-
-@app.route("/redirect")
-def open_redirect():
-    next_url = request.args.get("next", "https://example.com")
-
-    # Falha: open redirect
-    return f"""
-    <html>
-        <head>
-            <meta http-equiv="refresh" content="0; url={next_url}" />
-        </head>
-        <body>
-            Redirecionando para {next_url}
-        </body>
-    </html>
-    """
-
-
-@app.route("/file")
-def file_read():
-    file_name = request.args.get("name", "README.md")
-
-    # Falha: path traversal / leitura insegura de arquivo
-    with open(file_name, "r", encoding="utf-8", errors="ignore") as file:
-        content = file.read()
-
-    return f"<pre>{content}</pre>"
 
 
 if __name__ == "__main__":
     init_db()
 
-    # Falha: debug ativo
+    # Falha: debug ativo em aplicação web
     app.run(host="0.0.0.0", port=5000, debug=True)
